@@ -6,6 +6,7 @@ The repository contains implementations and examples of various generative model
 
 * Autoregressive-models
   * Masked Autoencoder for Distribution Estimation (MADE)
+  * Pixel-CNN
 * EBM
   * Restricted Boltzmann machines
   * Langevin dynamics with a Gaussian
