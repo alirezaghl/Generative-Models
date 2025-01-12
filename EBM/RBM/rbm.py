@@ -31,8 +31,11 @@ class RBM(nn.Module):
         v_samples = torch.bernoulli(v_prob)
         return v_samples, v_prob
     
-    def gibbs_sampling(self, v):
-        v_current = v
+    def gibbs_sampling(self, v_start=None, h_start=None):
+        if hidden is not None:
+            v_current, _ = self.sample_visible(hidden)
+        elif:
+            v_current = v
         
         for _ in range(self.config.num_steps):
             hidden_samples, _ = self.sample_hidden(v_current)
@@ -40,11 +43,11 @@ class RBM(nn.Module):
             v_current = v_samples
         
         hidden_samples, hidden_prob = self.sample_hidden(v_current)
-        return v_samples, v_prob, hidden_samples, hidden_prob
+        return v_samples, hidden_samples
     
     def contrastive_divergence(self, v):
-        pos_hidden_samples, _ = self.sample_hidden(v)
-        neg_visible_samples, _, neg_hidden_samples, _ = self.gibbs_sampling(v)
+        pos_hidden_samples, pos_hidden_prob = self.sample_hidden(v)
+        neg_visible_samples, neg_hidden_samples = self.gibbs_sampling(v_start=None, h_start=pos_hidden_samples)
         
         pos_associations = torch.matmul(v.t(), pos_hidden_samples)
         neg_associations = torch.matmul(neg_visible_samples.t(), neg_hidden_samples)
