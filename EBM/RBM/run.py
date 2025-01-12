@@ -5,7 +5,7 @@ from data import get_mnist_dataloader
 
 def visualize_reconstructions(rbm, data, epoch):
     with torch.no_grad():
-        recon_samples, recon_probs, _, _ = rbm.gibbs_sampling(data)
+        recon_samples, _ = rbm.gibbs_sampling(data)
     
     fig, axes = plt.subplots(2, 8, figsize=(15, 4))
     
@@ -49,7 +49,7 @@ def train_rbm(config):
             optimizer.step()
             
             with torch.no_grad():
-                recon_sample, recon_prob, _, _ = rbm.gibbs_sampling(data)
+                recon_sample, recon_prob = rbm.gibbs_sampling(data)
                 error = torch.mean((data - recon_sample) ** 2)
                 epoch_error += error.item()
                 num_batches += 1
