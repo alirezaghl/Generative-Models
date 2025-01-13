@@ -1,82 +1,185 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from masked_conv import MaskedConv2d
+import pytorch_lightning as pl
+from torchvision import datasets, transforms
+import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
 
-class GatedActivation(nn.Module):
-    def __init__(self):
+print(torch.cuda.is_available())
+
+class MaskedConvolution(nn.Module):
+    def __init__(self, c_in, c_out, mask, **kwargs):
         super().__init__()
+        kernel_size = (mask.shape[0], mask.shape[1])
+        dilation = 1 if "dilation" not in kwargs else kwargs["dilation"]
+        padding = tuple([dilation*(kernel_size[i]-1)//2 for i in range(2)])
+        self.conv = nn.Conv2d(c_in, c_out, kernel_size, padding=padding, **kwargs)
+        self.register_buffer('mask', mask[None,None])
 
     def forward(self, x):
-        x_f, x_g = torch.chunk(x, 2, dim=1)
-        return torch.tanh(x_f) * torch.sigmoid(x_g)
+        self.conv.weight.data *= self.mask
+        return self.conv(x)
 
-class PixelCNN(nn.Module):
-    def __init__(self, input_channels=1, n_hidden=64, n_layers=8):
+class VerticalStackConvolution(MaskedConvolution):
+    def __init__(self, c_in, c_out, kernel_size=3, mask_center=False, **kwargs):
+        mask = torch.ones(kernel_size, kernel_size)
+        mask[kernel_size//2+1:,:] = 0
+        if mask_center:
+            mask[kernel_size//2,:] = 0
+        super().__init__(c_in, c_out, mask, **kwargs)
+
+class HorizontalStackConvolution(MaskedConvolution):
+    def __init__(self, c_in, c_out, kernel_size=3, mask_center=False, **kwargs):
+        mask = torch.ones(1,kernel_size)
+        mask[0,kernel_size//2+1:] = 0
+        if mask_center:
+            mask[0,kernel_size//2] = 0
+        super().__init__(c_in, c_out, mask, **kwargs)
+
+class GatedMaskedConv(nn.Module):
+    def __init__(self, c_in, **kwargs):
         super().__init__()
+        self.conv_vert = VerticalStackConvolution(c_in, c_out=2*c_in, **kwargs)
+        self.conv_horiz = HorizontalStackConvolution(c_in, c_out=2*c_in, **kwargs)
+        self.conv_vert_to_horiz = nn.Conv2d(2*c_in, 2*c_in, kernel_size=1, padding=0)
+        self.conv_horiz_1x1 = nn.Conv2d(c_in, c_in, kernel_size=1, padding=0)
 
-        # First layer with mask type 'A' to prevent seeing the current pixel
-        self.first_conv = MaskedConv2d(
-            in_c=input_channels,
-            out_c=n_hidden,
-            kernel_size=7,
-            mask_type='A',
-            padding=3
-        )
+    def forward(self, v_stack, h_stack):
+        # Vertical stack (left)
+        v_stack_feat = self.conv_vert(v_stack)
+        v_val, v_gate = v_stack_feat.chunk(2, dim=1)
+        v_stack_out = torch.tanh(v_val) * torch.sigmoid(v_gate)
 
-        # Stack of hidden layers with mask type 'B'
-        self.hidden_layers = nn.ModuleList([
-            MaskedConv2d(
-                in_c=n_hidden,
-                out_c=2 * n_hidden,  # Doubling the output channels for gated activations
-                kernel_size=7,
-                mask_type='B',
-                padding=3
-            ) for _ in range(n_layers)
+        # Horizontal stack (right)
+        h_stack_feat = self.conv_horiz(h_stack)
+        h_stack_feat = h_stack_feat + self.conv_vert_to_horiz(v_stack_feat)
+        h_val, h_gate = h_stack_feat.chunk(2, dim=1)
+        h_stack_feat = torch.tanh(h_val) * torch.sigmoid(h_gate)
+        h_stack_out = self.conv_horiz_1x1(h_stack_feat)
+        h_stack_out = h_stack_out + h_stack
+
+        return v_stack_out, h_stack_out
+
+class PixelCNN(pl.LightningModule):
+    def __init__(self, c_in, c_hidden):
+        super().__init__()
+        self.save_hyperparameters()
+
+        # Initial convolutions
+        self.conv_vstack = VerticalStackConvolution(c_in, c_hidden, mask_center=True)
+        self.conv_hstack = HorizontalStackConvolution(c_in, c_hidden, mask_center=True)
+        
+        # Gated convolution blocks with dilation
+        self.conv_layers = nn.ModuleList([
+            GatedMaskedConv(c_hidden),
+            GatedMaskedConv(c_hidden, dilation=2),
+            GatedMaskedConv(c_hidden),
+            GatedMaskedConv(c_hidden, dilation=4),
+            GatedMaskedConv(c_hidden),
+            GatedMaskedConv(c_hidden, dilation=2),
+            GatedMaskedConv(c_hidden)
         ])
-
-        self.batch_norms = nn.ModuleList([
-            nn.BatchNorm2d(n_hidden) for _ in range(n_layers + 1)
-        ])
-
-        # Gated activation module
-        self.gated_activation = GatedActivation()
-
-        # Last convolution layer
-        self.last_conv = MaskedConv2d(
-            in_c=n_hidden,
-            out_c=n_hidden,
-            kernel_size=1,
-            mask_type='B'
-        )
-
-        # Output convolution layer
-        self.output_conv = MaskedConv2d(
-            in_c=n_hidden,
-            out_c=input_channels,
-            kernel_size=1,
-            mask_type='B'
-        )
+        
+        # Output layer for binary MNIST
+        self.conv_out = nn.Conv2d(c_hidden, c_in, kernel_size=1, padding=0)
 
     def forward(self, x):
-        # First layer
-        x = self.first_conv(x)
-        x = self.batch_norms[0](x)
-        x = F.relu(x)
-
-        for i, (conv, bn) in enumerate(zip(self.hidden_layers, self.batch_norms[1:])):
-            residual = x
-            x = conv(x)
-            x = self.gated_activation(x)
-            x = bn(x)
-            if i > 0:  # Skip first layer for residual -> pixelcnn++
-                x = x + residual
-
-        # Last layer
-        x = self.last_conv(x)
-        x = self.batch_norms[-1](x)
-        x = F.relu(x)
-
+        # Initial convolutions
+        v_stack = self.conv_vstack(x)
+        h_stack = self.conv_hstack(x)
+        
+        # Gated Convolutions
+        for layer in self.conv_layers:
+            v_stack, h_stack = layer(v_stack, h_stack)
+        
         # Output layer
-        x = self.output_conv(x)
-        return torch.sigmoid(x)
+        out = self.conv_out(F.elu(h_stack))
+        return torch.sigmoid(out)
+
+    def training_step(self, batch, batch_idx):
+        x, _ = batch  # Ignore labels
+        pred = self(x)
+        loss = F.binary_cross_entropy(pred, x)
+        self.log('train_loss', loss)
+        return loss
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+    def generate_samples(self, n_samples=36):
+        self.eval()
+        device = next(self.parameters()).device
+        H, W = 28, 28
+        
+        samples = torch.zeros(size=(n_samples, 1, H, W)).to(device)
+        
+        with torch.no_grad():
+            for i in tqdm(range(H)):
+                for j in range(W):
+                    out = self(samples)
+                    samples[:, :, i, j] = torch.bernoulli(out[:, :, i, j])
+        
+        return samples.cpu().numpy()
+
+    def on_train_epoch_end(self):
+        # Generate samples every 2 epochs
+        if self.current_epoch % 2 == 1:
+            samples = self.generate_samples()
+            self._plot_samples(samples)
+    
+    def _plot_samples(self, samples):
+        plt.figure(figsize=(10, 15))
+        for i in range(36):
+            plt.subplot(6, 6, i + 1)
+            plt.imshow(samples[i, 0], cmap='gray')
+            plt.axis('off')
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+
+class MNISTDataModule(pl.LightningDataModule):
+    def __init__(self, batch_size=128):
+        super().__init__()
+        self.batch_size = batch_size
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: (x > 0.5).float())
+        ])
+
+    def setup(self, stage=None):
+        datasets.MNIST.mirrors = ['https://ossci-datasets.s3.amazonaws.com/mnist/']  # Faster mirror
+        self.mnist_train = datasets.MNIST("", train=True, download=True, transform=self.transform)
+        self.mnist_test = datasets.MNIST("", train=False, download=True, transform=self.transform)
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(self.mnist_train, batch_size=self.batch_size, shuffle=True)
+
+    def test_dataloader(self):
+        return torch.utils.data.DataLoader(self.mnist_test, batch_size=self.batch_size)
+
+def main():
+    # Hyperparameters
+    c_in = 1  
+    c_hidden = 64  # hidden dimensions
+    batch_size = 128
+    max_epochs = 20
+
+    # Create model and data module
+    model = PixelCNN(c_in=c_in, c_hidden=c_hidden)
+    data_module = MNISTDataModule(batch_size=batch_size)
+
+    # Create trainer
+    trainer = pl.Trainer(
+        max_epochs=max_epochs,
+        accelerator='auto',  # automatically detect GPU
+        devices=1,
+        enable_progress_bar=True
+    )
+
+    # Train model
+    trainer.fit(model, data_module)
+
+if __name__ == "__main__":
+    main()
