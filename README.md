@@ -15,3 +15,5 @@ The repository contains implementations and examples of various generative model
   * RealNVP
 * GAN
   * DCGAN
+    
+* VAE
