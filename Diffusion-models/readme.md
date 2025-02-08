@@ -23,5 +23,4 @@ This implementation is a basic example and not a state-of-the-art model. Areas f
   
 ## References
 
-- 6.S978 Deep Generative Models
-- MIT EECS, Fall 2024 pset4
+- 6.S978 Deep Generative Models, pset4 (MIT EECS, Fall 2024)
