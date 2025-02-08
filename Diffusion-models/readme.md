@@ -20,7 +20,7 @@ This implementation is a basic example and not a state-of-the-art model. Areas f
 - Limited hyperparameter tuning
 - Basic learning rate schedule
 
-- 
+  
 ## References
 
 - 6.S978 Deep Generative Models
