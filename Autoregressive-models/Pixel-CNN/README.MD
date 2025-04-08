@@ -8,13 +8,6 @@ Conditional PixelCNN is an autoregressive model that generates images pixel by p
 
 ![Sample Results](https://github.com/alirezaghl/Generative-Models/blob/main/Autoregressive-models/Pixel-CNN/results-gated-pixelcnn/samples_epcoh_20.png)
 
-## Key Features
-
-- **Masked Convolutions**: Implementation of both vertical and horizontal masked convolutions to ensure proper autoregressive generation
-- **Gated Activation Units**: Using gated convolutions with tanh and sigmoid activations
-- **Class Conditioning**: Embedding layer for class conditioning integrated into the generation process
-- **Dilated Convolutions**: Multiple layers with different dilation rates to increase receptive field
-- **PyTorch Lightning Integration**: Clean, organized code structure with built-in training utilities
 
 ## References
 
