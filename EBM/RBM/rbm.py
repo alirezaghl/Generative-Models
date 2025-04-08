@@ -6,7 +6,7 @@ import torch.nn as nn
 class RBMConfig:
     v_dim: int = 784  
     h_dim: int = 256  
-    num_steps: int = 1 # CD-1
+    num_steps: int = 1  # CD-1
     batch_size: int = 64
     num_epochs: int = 20
     learning_rate: float = 1e-2
@@ -32,22 +32,25 @@ class RBM(nn.Module):
         return v_samples, v_prob
     
     def gibbs_sampling(self, v_start=None, h_start=None):
-        if hidden is not None:
-            v_current, _ = self.sample_visible(hidden)
-        elif:
-            v_current = v
+        if h_start is not None:
+            v_current, v_prob = self.sample_visible(h_start)
+        elif v_start is not None:
+            v_current = v_start
+        else:
+            # Initialize with random visible units if no starting point is provided
+            v_current = torch.rand(self.config.batch_size, self.config.v_dim).to(self.config.device)
         
         for _ in range(self.config.num_steps):
-            hidden_samples, _ = self.sample_hidden(v_current)
+            hidden_samples, hidden_prob = self.sample_hidden(v_current)
             v_samples, v_prob = self.sample_visible(hidden_samples)
             v_current = v_samples
         
         hidden_samples, hidden_prob = self.sample_hidden(v_current)
-        return v_samples, hidden_samples
+        return v_samples, hidden_samples, v_prob, hidden_prob
     
     def contrastive_divergence(self, v):
         pos_hidden_samples, pos_hidden_prob = self.sample_hidden(v)
-        neg_visible_samples, neg_hidden_samples = self.gibbs_sampling(v_start=None, h_start=pos_hidden_samples)
+        neg_visible_samples, neg_hidden_samples, _, _ = self.gibbs_sampling(v_start=v)
         
         pos_associations = torch.matmul(v.t(), pos_hidden_samples)
         neg_associations = torch.matmul(neg_visible_samples.t(), neg_hidden_samples)
