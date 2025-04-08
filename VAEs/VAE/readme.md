@@ -2,16 +2,6 @@
 
 This repository implements a Variational Autoencoder (VAE) in PyTorch for generating and reconstructing MNIST digits. The implementation features two different regularization approaches: Score Function Gradient Estimator (SGVB) and Kullback-Leibler divergence without expectation (KL-WO-E).
 
-## Requirements
-
-```
-torch
-numpy
-matplotlib
-torchvision
-tqdm
-dataclasses
-```
 
 ## Installation
 
