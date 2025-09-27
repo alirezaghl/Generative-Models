@@ -20,12 +20,10 @@ def train_made_on_mnist(config=None):
         }
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    print(f"device: {device}")
 
-    # Get data loaders
     train_loader, test_loader, train_dataset, test_dataset = get_mnist_loaders(config['batch_size'])
 
-    # Create model
     input_size = output_size = 784
     model = MADE(input_size, config['hidden_sizes'], output_size, config['num_masks']).to(device)
 
@@ -61,7 +59,6 @@ def train_made_on_mnist(config=None):
         avg_train_loss = total_train_loss / len(train_loader)
         train_losses.append(avg_train_loss)
 
-        # Testing
         model.eval()
         total_test_loss = 0
         with torch.no_grad():
@@ -83,12 +80,10 @@ def train_made_on_mnist(config=None):
             print(f"Changed mask at epoch {epoch+1}")
             plot_reconstructions_and_samples(model, test_dataset, device)
 
-    # Plot final loss curves
     plot_loss_curves(train_losses, test_losses)
 
     return model, train_losses, test_losses
 
 if __name__ == "__main__":
     model, train_losses, test_losses = train_made_on_mnist()
-    # Save model
     torch.save(model.state_dict(), 'made_mnist.pth')
