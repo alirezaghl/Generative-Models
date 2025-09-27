@@ -2,12 +2,9 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 def get_mnist_dataloader(batch_size, train=True):
-    """
-    Create MNIST dataloader
-    """
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Lambda(lambda x: x.view(-1))  # Flatten images
+        transforms.Lambda(lambda x: x.view(-1)) 
     ])
     
     dataset = datasets.MNIST(
