@@ -22,14 +22,14 @@ def main():
         for batch_idx, (x, _) in enumerate(train_loader):
             optimizer.zero_grad()
             log_prob = model.log_prob(x)
-            loss = -log_prob.mean()  # Negative log-likelihood
+            loss = -log_prob.mean()  # nll
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
         if (epoch + 1) % 100 == 0:
-            print(f'Epoch [{epoch+1}/{args.num_epochs}], Loss: {total_loss/len(train_loader):.4f}')
+            print(f'epoch [{epoch+1}], Loss: {total_loss/len(train_loader):.4f}')
 
     model_path = 'realnvp.pth'
     torch.save(model.state_dict(), model_path)
