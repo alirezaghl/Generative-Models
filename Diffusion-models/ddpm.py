@@ -196,7 +196,7 @@ class DDPM(nn.Module):
 
 def train_loop(ddpm, optimizer, train_loader, n_epochs, device, save_intermediate=True):
     for epoch in range(n_epochs):
-        print(f'\nEpoch {epoch+1}/{n_epochs}')
+        print(f'\nepoch {epoch+1}')
         ddpm.train()
         
         # Linear learning rate decay
@@ -226,7 +226,6 @@ def train_loop(ddpm, optimizer, train_loader, n_epochs, device, save_intermediat
                 n_sample = 20
                 samples, intermediate = ddpm.backward(n_sample, n_channels=1)
                 
-                # Plot final samples
                 fig, ax = plt.subplots(5, 4, figsize=(8, 10))
                 for i, j in itertools.product(range(5), range(4)):
                     ax[i,j].get_xaxis().set_visible(False)
