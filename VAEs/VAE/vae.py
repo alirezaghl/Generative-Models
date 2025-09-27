@@ -182,7 +182,6 @@ class Trainer:
         reconstruction_loss = self.mse(output['imgs'], x)
         reconstruction_loss = -1.0 * torch.sum(reconstruction_loss)
         
-        # Regularization term
         if reg_type == 'sgvb':
             reg_loss = self.sgvb.loss_SGVB(output)
         elif reg_type == 'kl':
@@ -190,7 +189,7 @@ class Trainer:
         else:
             reg_loss = torch.tensor(0.0).to(self.device)
 
-        # Total loss is reconstruction loss + regularization term
+        # total loss is reconstruction loss + regularization term
         coeff = 1e-3
         return -1.0 * torch.mean(reconstruction_loss + coeff * reg_loss)
 
@@ -221,19 +220,17 @@ class Trainer:
         return losses
 
     def train_with_sgvb(self, dataloader):
-        print("Training with SGVB regularization...")
+        print("training with SGVB regularization")
         losses = self.train(dataloader, reg_type='sgvb')
-        print("\nVisualizing SGVB results...")
         evaluate_model(self.model)
         plot_latent_images(self.model, n=20)
         return losses
     
     def train_with_kl_wo_e(self, dataloader):
-        print("Training with KL (without expectation) regularization...")
+        print("training with KL (without expectation) regularization")
         self.model = VAE(self.config).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config.lr)
         losses = self.train(dataloader, reg_type='kl')
-        print("\nVisualizing KL results...")
         evaluate_model(self.model)
         plot_latent_images(self.model, n=20)
         return losses
